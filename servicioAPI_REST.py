@@ -7,95 +7,96 @@ https://towardsdatascience.com/deploying-keras-models-using-tensorflow-serving-a
 
 '''
 
-# Import Flask
-from flask import Flask, request, jsonify, redirect
+#Flask
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-# Import Keras
-from keras.preprocessing import image
+#Tensorflow image
+from tensorflow.keras.preprocessing import image
 
-# Import python files
+#Algunas librerias
 import numpy as np
-
-import requests
-import json
-import os
 from werkzeug.utils import secure_filename
-from cargarModelo import cargarModelo
 
-FOLDER_IMAGENES = 'imagenes/cargadas'
-EXTENSIONES_PERMITIDAS = set(['png', 'jpg', 'jpeg'])
+#Importar la fucnión para cargar el modelo
+from cargarModelo import cargarModeloH5
 
-port = int(os.getenv('PORT', 5000))
+#Args
+import argparse
+ap = argparse.ArgumentParser()
+ap.add_argument("-p", "--port", required=True, help="Service PORT number is required.")
+args = vars(ap.parse_args())
+
+#Configurando el puerto del servicio
+port = args['port']
 print("Puerto: ", port)
 
-# Inicializar el servicio
+#Parametros
+UPLOAD_FOLDER = 'uploads/images'
+ALLOWED_EXTENSIONS = set(['png', 'jpg', 'jpeg'])
+
+#Initializar la App de Flask
 app = Flask(__name__)
 CORS(app)
-global loaded_model, graph
-loaded_model, graph = cargarModelo()
-app.config['FOLDER_IMAGENES'] = FOLDER_IMAGENES
 
-# Función para filtar los archivos permitidos
-def archivos_permitidos(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in EXTENSIONES_PERMITIDAS
+global loaded_model
+loaded_model = cargarModeloH5()
 
+def allowed_file(archivo):
+    return '.' in archivo and archivo.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# Ruta principal
+#Definiendo la ruta por default
 @app.route('/')
-def principal():
-    return 'Servicio API-REST funcionando, Servidor turismo-jiquilpan ACTIVO'
+def main_page():
+	return 'Servicio API-REST funcionando, App de Tursimo a la espera de imágenes'
 
-@app.route('/model/recursos-turisticos-jiquilpan/', methods=['GET', 'POST'])
-def default():
+# Ruta para realizar la predicción
+@app.route('/model/predict/',methods=['POST'])
+def predict():
     data = {"success": False}
     if request.method == "POST":
-        # Verifica que la petición tenga la parte del archivo
+        # Verificar si existe la parte del archivo
         if 'file' not in request.files:
-            print('Debes enviar un archivo')
+            print('Envie un archivo en su petición')
         file = request.files['file']
-        # Si el usuario no envia el archivo
+        # Verificar si se envió el archivo
         if file.filename == '':
-            print('Seleccione un archivo')
-        if file and archivos_permitidos(file.filename):
-            archivo_imagen = secure_filename(file.filename)
-            file.save(os.path.join(app.config['FOLDER_IMAGENES'], archivo_imagen))
+            print('No seleccionó el archivo de imagen')
+        if file and allowed_file(file.filename):
+            print("\nArchivo recibido: ",file.filename)
+            filename = secure_filename(file.filename)
+            tmpfile = ''.join([UPLOAD_FOLDER ,'/',filename])
+            file.save(tmpfile)
+            print("\nFilename stored:",tmpfile)
 
-            # loading image
-            archivo_imagen = FOLDER_IMAGENES + '/' + archivo_imagen
-            print("\nArchivo de imagen: ", archivo_imagen)
+            #loading image
+            image_to_predict = image.load_img(tmpfile, target_size=(224, 224))
+            test_image = image.img_to_array(image_to_predict)
+            test_image = np.expand_dims(test_image, axis = 0)
+            test_image = test_image.astype('float32')
+            test_image /= 255.0
 
-            imagen_predecir = image.load_img(archivo_imagen, target_size=(224, 224))
-            imagen_prueba = image.img_to_array(imagen_predecir)
-            imagen_prueba = np.expand_dims(imagen_prueba, axis=0)
-            imagen_prueba = imagen_prueba.astype('float32')
-            imagen_prueba /= 255
+            predictions = loaded_model.predict(test_image)[0]
+            index = np.argmax(predictions)
+            CLASSES = ['Benito Juárez', 'Fuente de la Aguadora', 'Fuente de los Gallitos', 'Fuente de los pescados', 'Generales Ornelas y Rio Seco', 'Ignacio Zaragoza', 'Lazaro Cárdenas del Río', 'Monumento a Lazaro Cárdenas', 'Lucia de la Paz']
+            ClassPred = CLASSES[index]
+            ClassProb = predictions[index]
 
-            with graph.as_default():
-                result = loaded_model.predict(imagen_prueba)[0]
-                # print(result)
+            print("Clases: ", CLASSES)
+            print("Predicción: ",predictions)
+            print("Predicción Index: ", index)
+            print("Predicción Label: ", ClassPred)
+            print("Predicción Prob: {:.2%} ".format(ClassProb))
 
-                # Resultados
-                # prediccion = 1 if (result >= 0.5) else 0
-                index = np.argmax(result)
-                CLASSES = ['Benito Juárez', 'Fuente de la Aguadora', 'Fuente de los Gallitos', 'Fuente de los pescados', 'Generales Ornelas y Rio Seco', 'Ignacio Zaragoza', 'Lazaro Cárdenas del Río', 'Monumento a Lazaro Cárdenas', 'Lucia de la Paz']
-                ClassPred = CLASSES[index]
-                ClassProb = result[index]
+            #Agregamos los resultados al JSON data
+            data["predictions"] = []
+            r = {"label": ClassPred, "score": float(ClassProb)}
+            data["predictions"].append(r)
 
-                print("Index:", index)
-                print("Predicción:", ClassPred)
-                print("Prob: {:.2%}".format(ClassProb))
-
-                # Insertar los resultados al JSON
-                data["predictions"] = []
-                r = {"label": ClassPred, "score": float(ClassProb)}
-                data["predictions"].append(r)
-
-                # Respuesta satisfactoria
-                data["success"] = True
+            #Todo bien
+            data["success"] = True
 
     return jsonify(data)
 
-
-# Ejecutar la aplicación
-app.run(host='0.0.0.0', port=port, threaded=False)
+# Run de application
+app.run(host='0.0.0.0',port=port, threaded=False)

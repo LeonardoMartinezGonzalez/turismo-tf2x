@@ -5,19 +5,15 @@ Autor: Leonardo Martínez González
 Fundamento:
 
 '''
-
 import tensorflow as tf
-from keras.models import load_model
 
-# Función para cargar el modelo del archivo: recursos_turisticos_model_full_tf2.h5
-def cargarModelo():
-
+def cargarModeloH5():
     ARCHIVO_MODELO = "recursos_turisticos_model_full_tf2.h5"
-    RUTA_MODELO = "model/tf2x/keras/full"
+    RUTA_MODELO = "../model/"
 
-    # Cargar la RNA desde disco
-    modelo_cargado = load_model(RUTA_MODELO + "/" + ARCHIVO_MODELO)
-    print("Modelo cargado de disco . . . ", modelo_cargado)
+    # Cargar el modelo desde disco
+    loaded_model = tf.keras.models.load_model(RUTA_MODELO + ARCHIVO_MODELO)
+    print(ARCHIVO_MODELO, " Cargando . . . ", loaded_model)
 
-    graph = tf.get_default_graph()
-    return modelo_cargado, graph
+    return loaded_model
+
