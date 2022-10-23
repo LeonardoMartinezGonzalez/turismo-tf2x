@@ -48,7 +48,7 @@ def allowed_file(archivo):
 #Definiendo la ruta por default
 @app.route('/')
 def main_page():
-	return 'Servicio API-REST funcionando, App de Tursimo a la espera de imágenes'
+	return 'Servicio API-REST funcionando, App de Turismo a la espera de imágenes'
 
 # Ruta para realizar la predicción
 @app.route('/model/predict/',methods=['POST'])
